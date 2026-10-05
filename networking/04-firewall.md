@@ -1,6 +1,6 @@
-# Lab 04 — firewalld: Zones, Ports and Services
+# Networking Lab N4 — firewalld: Zones, Ports and Services
 
-**Estimated time:** 40–50 min · **Prerequisite:** Lab 02 (`httpd` running), `setup` done
+**Estimated time:** 40–50 min · **Prerequisite:** Linux Lab 02 (`httpd` running), `setup` done
 (host can reach the VM through the host-only adapter).
 **Related:** `networking/05` Scenario B is the same kind of problem, but found the other way
 around (starting from the client).
@@ -22,7 +22,7 @@ another machine — that the rule is what makes the difference.
 | Default zone (fresh Workstation install) | `FedoraWorkstation` |
 | Zone I use for the tests after Step 2 | `public` |
 | Interfaces | `enp0s3` (NAT), `enp0s8` (host-only, the one the host reaches) |
-| Test service | `httpd` on port 80 (installed in Lab 02) |
+| Test service | `httpd` on port 80 (installed in Linux Lab 02) |
 | Test client | the **host machine** (there is a firewall on the VM only) |
 
 ## 3. What I needed to do
@@ -63,7 +63,7 @@ sudo firewall-cmd --info-zone=FedoraWorkstation | head -20
 sudo cat /usr/lib/firewalld/zones/FedoraWorkstation.xml
 ```
 
-**Example output — your result may differ**
+**Illustrative output — exact values differ per VM**
 
 ```text
 FedoraWorkstation (active)
@@ -99,8 +99,8 @@ I change it (this is what makes it survive reboots):
 nmcli -g NAME,connection.zone connection show
 nmcli -g GENERAL.ZONE device show            # the zone really in force per device (empty = default zone)
 
-NAT="Wired connection 1"        # <-- your NAT profile
-HO="Wired connection 2"         # <-- your host-only profile
+NAT="Wired connection 1"        # NAT profile
+HO="Wired connection 2"         # host-only profile
 
 sudo nmcli connection modify "$NAT" connection.zone public
 sudo nmcli connection modify "$HO"  connection.zone public
@@ -200,7 +200,7 @@ sudo cat /usr/lib/firewalld/services/http.xml
 sudo firewall-cmd --get-services | tr ' ' '\n' | grep -i '^http'
 ```
 
-**Example output — your result may differ**
+**Illustrative output — exact values differ per VM**
 
 ```text
 $ sudo firewall-cmd --info-service=http
@@ -268,9 +268,25 @@ Final state I leave behind: `public` zone on both interfaces, `ssh` + `dhcpv6-cl
 
 ## 6. What actually happened
 
-> _Run the steps and write 5–10 lines here: what the Workstation zone showed, what the host
-> test printed when the port was blocked, and what it printed after the rule (paste the real
-> lines). This is the most important "actually happened" in the networking labs._
+I checked firewalld with `systemctl status firewalld`, `firewall-cmd --state`,
+`--get-default-zone`, `--get-active-zones` and `--list-all`. The fresh Workstation install used
+the `FedoraWorkstation` zone, and `--info-zone=FedoraWorkstation` and the XML file showed that
+this zone opens ports `1025-65535` for TCP and UDP, so a firewall test in that zone would prove
+nothing. I chose option B: I set `connection.zone public` on both NetworkManager profiles and
+activated them again. `--get-active-zones` then showed both interfaces in `public`, and
+`--list-all` showed empty `ports:`.
+
+With `httpd` running, `curl -I http://localhost` worked on the VM and `ss` showed the listener,
+but `--query-service=http` said `no`. From the Windows 11 host the same port 80 test failed. The
+message alone could not tell me "blocked by the firewall" from "nothing is listening"; the
+checks on the VM (`ss` and `--query-service`) gave the answer.
+
+I added the service at runtime with `--add-service=http` and the host test worked. After
+`firewall-cmd --reload` the service was gone and the host test failed again. With
+`--permanent --add-service=http` and `--reload`, it worked and stayed. I looked at the `http`
+service with `--info-service=http` (port `80/tcp`) and at `/etc/firewalld/zones/public.xml`. I did
+not run the optional rich-rule step. For cleanup I removed the `http` service and left `public`
+with `ssh` and `dhcpv6-client`, no extra ports and no rich rules, and stopped `httpd`.
 
 ## 7. Troubleshooting (if something goes wrong)
 
@@ -284,18 +300,23 @@ Final state I leave behind: `public` zone on both interfaces, `ssh` + `dhcpv6-cl
 | `--permanent` change has no effect | `--reload` was not run | `sudo firewall-cmd --reload` |
 | Rich rule rejected | Typo in the rule text | `sudo firewall-cmd --permanent --add-rich-rule='...'` prints the error; `--check-config` |
 
-## 8. Evidence to capture
+## 8. Evidence
 
-- `evidence/networking/04-zone-rules.png` — `--get-active-zones` + `--list-all` + the
-  `FedoraWorkstation` XML (or `--info-zone`) that shows `1025-65535/tcp` — this documents
-  *why* the zone was changed.
-- `evidence/networking/04-host-test.png` — **from the host**: the failed test before the rule
-  and the successful test after it, next to the `--list-services` output on the VM. One
-  image with both windows, if you can, or `04-host-test-1.png` / `-2.png`.
+No screenshot is part of this lab. The evidence is the command flow in section 4 and
+the results written down in section 6.
 
 ## 9. What I learned
 
-> _Write this yourself after running the lab, 4–8 lines. Prompts: What is a zone in one
-> sentence? Why is `--reload` needed after `--permanent`? Why did `curl localhost` keep
-> working while the host could not connect? What would I check first if a colleague said
-> "the service is up but nobody can reach it"?_
+A zone is a set of rules that applies to the interfaces assigned to it, and the services and
+ports in it decide which incoming connections are accepted. A firewalld "service" such as `http`
+is only a named preset of ports and protocols (port `80/tcp` here). A rule only matters for the
+interface in the zone I changed, so I always check `--get-active-zones` first.
+
+The main lesson was the order of states. A rule without `--permanent` changes only the running
+firewall and is lost with `--reload` or a reboot. A permanent rule is written to disk but is
+not active until `--reload`. That is why the same command gave different results in my test.
+
+It also showed how a firewall affects access to a service: `curl localhost` kept working, because
+traffic on the loopback is not filtered, while the host could not connect, although `httpd`
+was running and listening. If somebody says "the service is up but nobody can reach it", I would
+check `ss` for the listener, then `firewall-cmd --get-active-zones` and `--list-all`.

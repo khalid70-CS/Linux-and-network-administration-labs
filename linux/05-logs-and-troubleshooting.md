@@ -1,7 +1,7 @@
-# Lab 05 — Logs and Troubleshooting (2 Scenarios)
+# Linux Lab 05 — Logs and Troubleshooting (2 Scenarios)
 
-**Estimated time:** 40–50 min · **Prerequisite:** Lab 02 (httpd) and Lab 04 (to practise
-like a real admin: SSH from the host, keep the VM console for emergencies).
+**Estimated time:** 40–50 min · **Prerequisite:** Linux Lab 02 (httpd) and Linux Lab 04 (SSH from
+the host, with the VM console kept open as a fallback).
 **Snapshot recommended before this lab.**
 
 ## 1. Objective
@@ -41,7 +41,7 @@ sudo journalctl -b -1 -n 20 --no-pager          # logs of the previous boot
 Where logs live on Fedora: `journald` keeps them, and `journalctl` reads them. If
 `/var/log/messages` or `/var/log/secure` exist on a machine, that means the optional
 `rsyslog` package is writing plain text files there too (a default Workstation install does
-not have them). Lab 04's SSH logs are an example: `sudo journalctl -u sshd -n 20`.
+not have them). Linux Lab 04's SSH logs are an example: `sudo journalctl -u sshd -n 20`.
 
 ---
 
@@ -79,7 +79,7 @@ hostname -I; curl -I http://$(hostname -I | awk '{print $1}')
 What I look for in the journal output: the line with the error, not the whole page.
 In this case a line like:
 
-**Example output — your result may differ**
+**Illustrative output — exact values differ per VM**
 
 ```text
 httpd[1234]: AH00526: Syntax error on line 2 of /etc/httpd/conf.d/lab.conf:
@@ -209,9 +209,24 @@ path). And that `file` / `cat -A` are the quick way to see invisible characters.
 
 ## 6. What actually happened
 
-> _Run both scenarios and write 6–10 lines here: the exact error lines you got, how long it
-> took you to find the cause, and which command gave it away. If you were stuck, say where
-> you got stuck — that is the most useful part of this file._
+I first tried the `journalctl` options I actually use: `-b -p err`, `-u httpd -n 30`, `-xeu`,
+`--since` and `-f`.
+
+**Scenario A (web server).** Symptom: after I created `/etc/httpd/conf.d/lab.conf` with the
+misspelled directive `ServeName`, `systemctl restart httpd` failed. Checks: `systemctl status`
+showed a failed service, `ss -tlnp | grep :80` showed no listener, and `curl -I
+http://localhost` could not connect. `journalctl -xeu httpd` contained the real error: a
+syntax error in `lab.conf` about an invalid command `ServeName`. Cause: a wrong directive in my
+config file, not a problem of the `httpd` service. Fix: I removed the file. Verification:
+`apachectl configtest` printed `Syntax OK`, `is-active` printed `active` and `curl -I` returned
+`HTTP/1.1 200 OK`.
+
+**Scenario B (script).** Symptom: `./hello.sh` failed with `Permission denied`, while
+`bash hello.sh` worked. Check: `ls -l` showed no `x` bit. Fix: `chmod +x`, and `./hello.sh`
+then ran. The second script, `crlf-script.sh`, failed with `bad interpreter` and `^M` in the
+path. Checks: `file` reported CRLF line terminators and `head -1 | cat -A` showed `^M` at the
+end of the shebang line. Cause: Windows-style line endings. Fix: `sed -i 's/\r$//'`.
+Verification: `file` no longer mentioned CRLF and `./crlf-script.sh` ran.
 
 ## 7. Troubleshooting (if something goes wrong)
 
@@ -224,19 +239,29 @@ path). And that `file` / `cat -A` are the quick way to see invisible characters.
 | `sed -i` says "Permission denied" | The file is root-owned | `sudo sed -i 's/\r$//' <file>` |
 | The script still fails after the fix | A second, different problem (e.g. a bad path inside it) | `bash -x ./script.sh` shows every line as it runs |
 
-## 8. Evidence to capture
+## 8. Evidence
 
-- `evidence/linux/05-scenario-a-config-error.png` — the failed `httpd` status/journal error
-  **and** the healthy state after the fix (the `200 OK` from `curl -I`).
-- `evidence/linux/05-scenario-b-script.png` — `Permission denied` → works after `chmod +x`,
-  and the `bad interpreter` error → works after the `sed` fix.
+One screenshot, taken in the Fedora VM:
 
-  If the two halves do not fit in one window, take two screenshots each and name them
-  `-1.png` / `-2.png` — keep the numbers low.
+- `evidence/linux/05-troubleshooting.png` — terminal showing one real troubleshooting
+  sequence from this lab: the failure (for example the failed `httpd` status or the
+  `bad interpreter` error), the investigation (journal error line, or `file` / `cat -A`), the
+  fix, and the successful verification afterwards.
 
 ## 9. What I learned
 
-> _Write this yourself after running the lab, 4–8 lines. Prompts: Why is the journal better
-> than the terminal output for a failed service? What does `systemctl status` tell me that
-> `journalctl` does not (and the other way round)? What is the fastest way to tell a
-> permission problem from a line-ending problem?_
+The main lesson is that every fix came from evidence. In Scenario A the terminal only said that
+the restart failed; the useful line was in the journal and named the file and the directive.
+Restarting `httpd` again would never have helped while the config was broken. `systemctl
+status` gives a short summary and the last log lines, `journalctl -u` gives the full history,
+and I need both. I also learned that `apachectl configtest` finds this kind of error before I
+restart the service.
+
+In Scenario B the two messages looked similar but had different causes. `Permission denied`
+with a working `bash hello.sh` means the file is not executable. `bad interpreter` with `^M`
+means the shebang line itself is wrong. The fastest way to tell them apart was to look at the
+file with `ls -l`, `file` and `cat -A` instead of guessing, because carriage returns are
+invisible in a normal editor.
+
+My method is now: write down the exact symptom, check status, read the log, check listening
+ports and config, fix the cause, and verify with the same command that failed first.

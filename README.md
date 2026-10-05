@@ -1,14 +1,21 @@
 # Linux & Networking Lab
 
-A practical Fedora lab for Linux administration, networking, SSH, and basic troubleshooting.
-The project is meant to be run in a VirtualBox VM and documented with command output and a
-small set of screenshots.
+A hands-on Fedora lab for Linux fundamentals, networking, SSH, and basic troubleshooting,
+built as university-level practice on a single VirtualBox VM.
 
-## Current status
+| | |
+|---|---|
+| **Project** | Linux & Networking Lab (university-level practical lab) |
+| **Environment** | Windows 11 host + VirtualBox + Fedora Workstation VM |
+| **Skills demonstrated** | Linux administration fundamentals, users/groups/permissions, processes and services, packages and filesystem inspection, SSH, logs and troubleshooting, NetworkManager (`nmcli`), IP configuration, routing, DNS, firewalld, network troubleshooting, basic read-only Bash checks |
+| **Level** | Student lab / hands-on practice, not production experience |
 
-The lab instructions are ready. The status table shows which labs have actually been run.
-I do not count a lab as finished until the commands have been run and the notes in sections
-6 and 9 have been filled in.
+## Status
+
+All 10 labs (5 Linux, 5 networking) were completed and verified on my Fedora VM. Each lab
+file contains the commands, what actually happened, and what I learned. Screenshots exist only
+for the four Linux evidence items listed in `evidence/README.md`; the networking labs are
+documented in their Markdown files.
 
 ## What is covered
 
@@ -20,13 +27,13 @@ I do not count a lab as finished until the commands have been run and the notes 
 - 4 fault scenarios used to practise troubleshooting instead of only following setup steps.
 
 The VM is a lab machine, not a production server. No Ansible, Terraform, containers, CI/CD,
-or other automation tools are required.
+or other automation tools are used.
 
 ## Environment
 
 | Item | Setup |
 |---|---|
-| Host | `<fill in: your host OS and version>` |
+| Host | Windows 11 |
 | Hypervisor | VirtualBox 7.x |
 | Guest | Fedora Workstation, 64-bit |
 | VM | 4 GB RAM, 2 CPUs, 25 GB disk |
@@ -34,7 +41,7 @@ or other automation tools are required.
 | Adapter 2 | Host-only, `192.168.56.0/24` |
 | User | normal user in `wheel` |
 
-Take a snapshot before labs that intentionally change or break the system.
+I took snapshots before the labs that intentionally change or break the system.
 
 ## Tools
 
@@ -67,31 +74,34 @@ linux-networking-lab/
 │   └── network-check.sh
 └── evidence/
     ├── README.md
-    ├── linux/
-    └── networking/
+    └── linux/
+        ├── 01-users-permissions.png
+        ├── 02-httpd-service.png
+        ├── 04-ssh-key-login.png
+        └── 05-troubleshooting.png
 ```
 
 ## Labs
 
 | # | Lab | Main commands / topics | Status |
 |---|---|---|---|
-| 01 | Users, groups, permissions | `useradd`, `usermod`, `id`, `chown`, `chmod`, setgid, umask | ⬜ |
-| 02 | Processes and services | `ps`, `pgrep`, signals, `systemctl`, `ss` | ⬜ |
-| 03 | Packages and filesystem | `dnf`, `rpm`, `lsblk`, `df`, `du`, `stat`, links | ⬜ |
-| 04 | SSH | `sshd`, keys, `authorized_keys`, password authentication | ⬜ |
-| 05 | Logs and troubleshooting | `journalctl`, service config, executable files, CRLF | ⬜ |
-| N1 | Network configuration | `ip`, `nmcli`, DHCP/static IP, hostname | ⬜ |
-| N2 | Routing and connectivity | `ip route`, `ping`, `tracepath`, `curl`, `nc` | ⬜ |
-| N3 | DNS | `resolvectl`, `dig`, `getent`, `/etc/hosts`, DNS settings | ⬜ |
-| N4 | Firewall | firewalld zones, services, ports, runtime/permanent rules | ⬜ |
-| N5 | Network troubleshooting | DNS failure and firewall/SSH failure | ⬜ |
+| 01 | Users, groups, permissions | `useradd`, `usermod`, `id`, `chown`, `chmod`, setgid, umask | ✅ |
+| 02 | Processes and services | `ps`, `pgrep`, signals, `systemctl`, `ss` | ✅ |
+| 03 | Packages and filesystem | `dnf`, `rpm`, `lsblk`, `df`, `du`, `stat`, links | ✅ |
+| 04 | SSH | `sshd`, keys, `authorized_keys`, password authentication | ✅ |
+| 05 | Logs and troubleshooting | `journalctl`, service config, executable files, CRLF | ✅ |
+| N1 | Network configuration | `ip`, `nmcli`, DHCP/static IP, hostname | ✅ |
+| N2 | Routing and connectivity | `ip route`, `ping`, `tracepath`, `curl`, `nc` | ✅ |
+| N3 | DNS | `resolvectl`, `dig`, `getent`, `/etc/hosts`, DNS settings | ✅ |
+| N4 | Firewall | firewalld zones, services, ports, runtime/permanent rules | ✅ |
+| N5 | Network troubleshooting | DNS failure and firewall/SSH failure | ✅ |
 
-`⬜` means the lab is written but not yet verified on the VM. Change it to `✅` only after
-running the lab and adding the required evidence.
+All labs were run in this order on the Fedora VM. Inside the `networking/` files, "Lab N"
+refers to `networking/0N` (shown as N1–N5 here); the `linux/` files use `Linux Lab 0N`.
 
 ## Troubleshooting scenarios
 
-The project includes four failures on purpose:
+The project includes four failures that I created on purpose:
 
 | Scenario | Lab |
 |---|---|
@@ -100,7 +110,9 @@ The project includes four failures on purpose:
 | IP connectivity works but DNS does not | `networking/05` |
 | Service is listening but remote access is blocked | `networking/05` |
 
-The troubleshooting format is simple: symptom → checks → cause → fix → verify.
+I created and solved all four failures during the labs. The format is always the same:
+symptom → checks → cause → fix → verify. The notes in each lab file describe what I
+observed and which command gave the cause away.
 
 ## Scripts
 
@@ -108,7 +120,6 @@ Both scripts only read system information and return a non-zero exit code when a
 problem. They do not need `sudo`.
 
 ```bash
-chmod +x scripts/*.sh
 ./scripts/system-check.sh
 ./scripts/network-check.sh
 ```
@@ -127,21 +138,14 @@ It returns `1` when one or more checks fail.
 2. Take the `clean-install` snapshot.
 3. Run the labs in order: `linux/01` through `linux/05`, then `networking/01` through
    `networking/05`.
-4. Fill in **What actually happened** and **What I learned** from your real output.
-5. Add only the screenshots listed in `evidence/README.md`.
-6. Commit the work as you go, for example:
-
-```bash
-git add .
-git commit -m "lab 03: packages and filesystem"
-git push
-```
+4. Compare your own output with the "What actually happened" notes in each lab file.
 
 ## Evidence
 
-Example output is labelled as an example. Do not copy it as a real result. Keep screenshots in
-`evidence/<area>/` and do not put passwords, private keys, tokens, or other secrets in the repo.
-The full screenshot list is in `evidence/README.md`.
+Screenshots are kept only for the Linux labs, in `evidence/linux/`, and the exact policy is in
+`evidence/README.md`. The networking labs have no screenshots. Command output shown in the lab
+files is labelled as illustrative when it is an example. No passwords, private keys, tokens or
+other secrets are stored in the repository.
 
 ## Scope and limitations
 
@@ -152,19 +156,23 @@ production hardening are outside the scope of these labs.
 The scripts are intentionally small. They do not include argument parsing, logging frameworks,
 or a larger monitoring framework.
 
-## After the labs
+## What the labs demonstrate
 
-The final notes should make it possible to explain:
-
-- Linux file permissions, groups, umask, and setgid.
-- `systemctl` service states and where to find the useful logs.
-- SSH key authentication and the important file permissions around it.
-- How NetworkManager, routes, gateways, and DNS fit together.
-- firewalld zones and the difference between runtime and permanent rules.
-- A repeatable order for separating DNS, routing, service, and firewall problems.
+- **Permissions:** shared directory with owner, group, `chmod`, setgid and umask, tested with
+  users inside and outside the group.
+- **Processes and services:** finding and signalling processes, `systemctl` states, the
+  difference between `stop` and `disable`, and checking listeners with `ss`.
+- **Packages and filesystem:** `dnf`/`rpm` queries, `lsblk`, `df`, `du`, `stat`, and hard vs
+  symbolic links.
+- **SSH:** key-based login, `authorized_keys` permissions, and password login disabled with a
+  config drop-in.
+- **Logs and troubleshooting:** a broken Apache config and script permission/CRLF errors,
+  solved from `journalctl`, `file` and `cat -A` evidence.
+- **Networking:** NetworkManager (`nmcli`) static IP vs DHCP, routing and the default route,
+  DNS with `resolvectl` and `dig`, firewalld zones with runtime vs permanent rules, and
+  a fixed order of checks that separates DNS, routing, service and firewall problems.
 
 ## Notes
 
 The commands are written for Fedora. Ubuntu/Debian alternatives are intentionally not covered.
-The project is in English so the command names and terminology match the documentation normally
-used in Linux administration.
+The project is written in English to match the command names and documentation used on Linux.

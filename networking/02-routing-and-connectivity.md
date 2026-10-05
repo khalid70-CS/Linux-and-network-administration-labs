@@ -1,7 +1,7 @@
-# Lab 02 — Routing and Connectivity Testing
+# Networking Lab N2 — Routing and Connectivity Testing
 
 **Estimated time:** 25–35 min · **Prerequisite:** `setup` (packages `traceroute`,
-`nmap-ncat` installed), Lab 01 not required.
+`nmap-ncat` installed), Networking Lab N1 not required.
 
 ## 1. Objective
 
@@ -34,7 +34,7 @@ ip route get 8.8.8.8      # which interface + source IP a packet to 8.8.8.8 woul
 ip route get 192.168.56.1 # and for a host-only destination
 ```
 
-**Example output — your result may differ**
+**Illustrative output — exact values differ per VM**
 
 ```text
 $ ip route
@@ -132,7 +132,7 @@ This change is temporary. NetworkManager re-adds its own default route on
 **Run this on Fedora**
 
 ```bash
-CON="Wired connection 1"                  # <-- your NAT profile
+CON="Wired connection 1"                  # NAT profile
 sudo nmcli connection modify "$CON" +ipv4.routes "10.10.10.0/24 $GW"
 nmcli -g ipv4.routes connection show "$CON"
 ip route | grep 10.10.10.0
@@ -152,8 +152,23 @@ sudo nmcli connection modify "$CON" -ipv4.routes "10.10.10.0/24 $GW"   # remove 
 
 ## 6. What actually happened
 
-> _Run the steps and write 4–8 lines here: your real gateway/interface, the real tracepath
-> hops (how many?), and the exact error message you got after deleting the default route._
+I read the routing table with `ip route` and `ip route show default`. The default route went
+through the NAT interface `enp0s3` and the two attached networks were `scope link`. `ip route
+get 8.8.8.8` showed which interface and source address a packet to the internet would use, and
+`ip route get 192.168.56.1` showed the direct route on the host-only interface. After
+`ping -c 2 10.0.2.2`, `ip neigh` listed the gateway with its MAC address.
+
+I tested the path in layers: ping to `127.0.0.1`, to the gateway `10.0.2.2` and to `1.1.1.1`,
+then `tracepath fedoraproject.org`. For the application layer I used `curl -I` and the `curl
+-w` timing line (name lookup, connect, total), and `nc -zv` to one port that was open
+(`1.1.1.1` port 53) and one that was not (`10.0.2.2` port 22). `ss -tuln` showed what the VM
+itself was listening on.
+
+Then I removed the default route with `sudo ip route del default`. `ip route show default` was
+empty, `ip route get 8.8.8.8` reported `Network is unreachable`, and ping to `1.1.1.1` and
+`curl` failed, but ping to the gateway `10.0.2.2` still worked. I restored the route with
+`ip route add default via "$GW" dev "$IF"` using the gateway and interface I saved before, and
+ping to `1.1.1.1` worked again. I did not run the optional persistent route test.
 
 ## 7. Troubleshooting (if something goes wrong)
 
@@ -161,22 +176,30 @@ sudo nmcli connection modify "$CON" -ipv4.routes "10.10.10.0/24 $GW"   # remove 
 |---|---|---|
 | `Network is unreachable` | No route for that destination (often no default route) | `ip route`, `ip route get <IP>` |
 | Ping fails but `curl https://...` works | ICMP blocked somewhere on the path | `curl -I`, `nc -zv host 443` |
-| `Name or service not known` | DNS, not routing | Lab 03 / Lab 05 (Scenario A) |
+| `Name or service not known` | DNS, not routing | N3 / N5 (Scenario A) |
 | `tracepath` stops at the first hop | That hop does not send the ICMP replies tracepath uses (very common with NAT/ISP) | try `tracepath -n 8.8.8.8`, or accept it and use `curl` timing |
 | `nc: connect ... Connection refused` | The host is reachable, nothing listens on that port | `ss -tln` on the target, `firewall-cmd --list-all` |
 | `nc` hangs with no message | Dropped packets (firewall) instead of a refusal | `--timeout`, then check firewalls on both sides |
 | I deleted the default route and now nothing works | You did not restore it | `sudo ip route add default via <GW> dev <IF>`, or reboot the VM |
 
-## 8. Evidence to capture
+## 8. Evidence
 
-- `evidence/networking/02-routes.png` — `ip route`, `ip route get 8.8.8.8`, the empty route
-  after the break, and the restored route + successful ping. (If you take the screenshot in
-  two parts, use `02-routes-1.png` / `02-routes-2.png`.)
-- `evidence/networking/02-tracepath.png` (optional) — one `tracepath` result.
+No screenshot is part of this lab. The evidence is the command flow in section 4 and
+the results written down in section 6.
 
 ## 9. What I learned
 
-> _Write this yourself after running the lab, 4–8 lines. Prompts: What exactly does the
-> default route do? Why did the local network keep working when the default route was gone?
-> How is `ip route get <IP>` different from `ip route`? What is the difference between a
-> "refused" and a "hung" port check?_
+The default route is the entry the kernel uses for every destination that is not in a directly
+attached network. Without it the machine can still talk to its local networks (they have their
+own `scope link` routes) but has no way out, which is exactly what happened: gateway ping
+worked, internet ping failed with `Network is unreachable`. So "local works, internet does
+not" is a good hint to check `ip route`.
+
+`ip route` shows the whole table, while `ip route get <IP>` answers the more useful question for
+one destination: which route wins and which source address is used. Testing in layers (loopback,
+gateway, internet IP, then an application with `curl`) tells me where the path stops. A failed
+ping is only a hint because ICMP can be blocked while web traffic works.
+
+For port checks I learned the difference between "refused" (the host answered and nothing
+listens) and "hung" (packets were probably dropped, for example by a firewall). Changes made with
+`ip route` are temporary; a permanent route belongs in the NetworkManager profile.

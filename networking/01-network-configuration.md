@@ -1,4 +1,4 @@
-# Lab 01 — Network Interfaces and IP Configuration (nmcli)
+# Networking Lab N1 — Network Interfaces and IP Configuration (nmcli)
 
 **Estimated time:** 25–35 min · **Prerequisite:** `setup` done (two adapters: NAT + host-only).
 **Related:** the IP you set here is used by the SSH lab and the firewall lab.
@@ -12,7 +12,7 @@ DHCP — and why a change made with `ip` disappears while a change made with `nm
 ## 2. Environment
 
 - Fedora Workstation VM, interfaces `enp0s3` (NAT, internet) and `enp0s8` (host-only).
-- My VM's host-only connection name: `<fill in: usually "Wired connection 2">`.
+- My VM's host-only connection name: `Wired connection 2` (the name used in the commands below).
 
 > Do this lab **in the VirtualBox window**, not over SSH: changing the IP of the
 > interface you are connected through kills your session. Take a snapshot first.
@@ -43,7 +43,7 @@ nmcli connection show        # the saved profiles (the thing NetworkManager real
 profile (then it has no IP from NetworkManager), and a profile can exist without being
 active.
 
-**Example output — your result may differ**
+**Illustrative output — exact values differ per VM**
 
 ```text
 $ nmcli device status
@@ -58,7 +58,7 @@ lo      loopback  connected     lo
 **Run this on Fedora**
 
 ```bash
-CON="Wired connection 2"                              # <-- use the name of YOUR host-only profile
+CON="Wired connection 2"                              # host-only profile
 
 nmcli connection show "$CON"                          # everything NetworkManager knows
 nmcli -g ipv4.method,ipv4.addresses,ipv4.gateway,ipv4.dns connection show "$CON"
@@ -161,8 +161,23 @@ The hostname is handled by systemd (`systemd-hostnamed`), which writes `/etc/hos
 
 ## 6. What actually happened
 
-> _Run the steps and write 4–8 lines here: the real names of your profiles, the real DHCP
-> address, and whether the host could reach `192.168.56.50`. Your own words._
+I listed the interfaces with `ip -brief link` and `ip -brief addr`, and the NetworkManager
+profiles with `nmcli device status` and `nmcli connection show`. Both `enp0s3` (NAT) and
+`enp0s8` (host-only) were connected, each with its own profile; the host-only profile was
+`Wired connection 2`. I read its settings with `nmcli -g ... connection show` and looked at the
+stored `.nmconnection` file under `/etc/NetworkManager/system-connections/`.
+
+I set a static address on the host-only profile with `nmcli connection modify` (`ipv4.method
+manual`, `ipv4.addresses 192.168.56.50/24`, no gateway) and activated it with `nmcli connection
+up`. `ip -brief addr show enp0s8` then showed `192.168.56.50/24`, and `ip route show default`
+still pointed to the NAT interface, as planned. I also pinged `192.168.56.1`, the host-side
+host-only adapter. Then I returned the profile to DHCP with `ipv4.method auto` and verified
+with `ip -brief addr` that VirtualBox DHCP had given the interface an address again.
+
+For comparison I added `192.168.56.77/24` with `ip addr add`. It showed up in `ip -brief addr`
+and the ping worked, and I removed it again with `ip addr del`. Finally I used `hostnamectl` and
+`hostnamectl set-hostname lab-fedora`, and checked the result with `hostname` and
+`/etc/hostname`.
 
 ## 7. Troubleshooting (if something goes wrong)
 
@@ -175,15 +190,22 @@ The hostname is handled by systemd (`systemd-hostnamed`), which writes `/etc/hos
 | Two default routes | Both profiles got a gateway | `ip route`, remove the gateway from the host-only profile |
 | `nmcli` says "not authorized" | Need `sudo` for profile changes | rerun with `sudo` |
 
-## 8. Evidence to capture
+## 8. Evidence
 
-- `evidence/networking/01-nmcli-static-ip.png` — `nmcli connection show "$CON"` (or the `-g`
-  lines) next to `ip -brief addr` showing the static address. Before/after is even better:
-  one screenshot with the manual result, one with the `auto` result
-  (`01-nmcli-dhcp.png`).
+No screenshot is part of this lab. The evidence is the command flow in section 4 and
+the results written down in section 6.
 
 ## 9. What I learned
 
-> _Write this yourself after running the lab, 4–8 lines. Prompts: interface vs connection
-> profile — what is the difference? Why did `ip addr add` not survive? Why must the
-> host-only profile have no gateway?_
+An interface is the device the kernel sees (`enp0s8`). A NetworkManager connection is a saved
+profile with the settings (DHCP or static, address, gateway, DNS, zone) that gets applied to a
+device. `nmcli connection show` lists the profiles, and `ip addr` shows the state that is
+really on the interface now. After `nmcli connection modify` the profile is changed, but the
+interface only follows after `nmcli connection up`, so I verify both: the profile with `nmcli
+-g` and the result with `ip`.
+
+The `ip addr add` test showed the other difference: `ip` changes the running state only, so it
+is good for a quick test but is not saved, while `nmcli` changes are kept and come back after a
+reboot. I also learned why the host-only profile has no gateway: a second default route would
+compete with the NAT one and could break the internet access of the VM. Do the interface
+changes in the VirtualBox window, not over SSH, because a changed IP ends the session.

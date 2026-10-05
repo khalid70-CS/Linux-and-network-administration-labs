@@ -1,7 +1,7 @@
-# Lab 02 — Processes and systemd Services
+# Linux Lab 02 — Processes and systemd Services
 
-**Estimated time:** 30–40 min · **Prerequisite:** Lab 01 not required; `setup` done.
-**Related:** the `httpd` service installed here is used again in Lab 03 and in the
+**Estimated time:** 30–40 min · **Prerequisite:** Linux Lab 01 not required; `setup` done.
+**Related:** the `httpd` service installed here is used again in Linux Lab 03 and in the
 firewall lab (`networking/04`).
 
 ## 1. Objective
@@ -93,7 +93,7 @@ sudo ss -tlnp | grep :80      # who is listening on port 80 (sudo shows the proc
 curl -I http://localhost      # the HTTP status line is enough for me
 ```
 
-**Example output — your result may differ**
+**Illustrative output — exact values differ per VM**
 
 ```text
 $ systemctl is-active httpd
@@ -153,8 +153,21 @@ edit a unit file, `sudo systemctl daemon-reload` is required before the change i
 
 ## 6. What actually happened
 
-> _Run the steps on your VM, then write 4–8 lines here with your real output. Mention the
-> real PID numbers and the real `curl` output you got, in your own words._
+I looked at processes with `ps -ef`, `ps aux --sort=-%cpu` and `pgrep -a sshd`, and used the
+`PPID` column to see that every process has a parent. I started `sleep 900 &`, found it with
+`jobs`, `pgrep -af` and `ps -o pid,ppid,stat,etime,cmd`, and stopped it with a plain `kill`
+(SIGTERM). The next `pgrep -af "sleep 900"` printed nothing, so the process was gone and I did
+not need `kill -9`. I also opened `top` and used `P`, `M` and `q`.
+
+Then I installed `httpd` with `dnf` and ran `systemctl enable --now httpd`. `systemctl status`
+showed `active (running)`, `is-active` printed `active` and `is-enabled` printed `enabled`.
+`sudo ss -tlnp | grep :80` showed the listener on port 80 and `curl -I http://localhost`
+returned `HTTP/1.1 200 OK`.
+
+After `systemctl stop httpd`, `is-active` said `inactive`, but `is-enabled` was still `enabled`.
+`curl` failed and `ss` showed no listener on port 80. After `systemctl start httpd`, `curl`
+worked again. At the end `systemctl --failed` listed no failed units and `systemctl cat httpd`
+showed the unit file under `/usr/lib/systemd/system/`.
 
 ## 7. Troubleshooting (if something goes wrong)
 
@@ -167,16 +180,27 @@ edit a unit file, `sudo systemctl daemon-reload` is required before the change i
 | `kill <PID>` does nothing | The process ignores SIGTERM (it has a handler) | `ps -o stat -p <PID>`, then `kill -9` and note *why* in section 6 |
 | A service cannot read a file although permissions look right | SELinux label problem | `sudo ausearch -m avc -ts recent`, `ls -Z file` |
 
-## 8. Evidence to capture
+## 8. Evidence
 
-- `evidence/linux/02-process-signals.png` — `pgrep -af "sleep 900"`, the `kill`, and the
-  empty `pgrep` afterwards (one terminal, one screenshot).
-- `evidence/linux/02-httpd-service.png` — `systemctl status httpd` (active) + `curl -I`
-  answer + `sudo ss -tlnp | grep :80`.
+One screenshot, taken in the Fedora VM:
+
+- `evidence/linux/02-httpd-service.png` — terminal showing `systemctl status httpd --no-pager`
+  with `active (running)` and a successful local `curl -I http://localhost`.
 
 ## 9. What I learned
 
-> _Write this yourself after running the lab, 4–8 lines. Prompts: What is the difference
-> between `stop` and `disable`? Why prefer SIGTERM before SIGKILL? Why does a background
-> `sleep` survive my shell closing but not a reboot? What did `PPID` tell me about how
-> processes are started?_
+A process is just a running program with a PID and a parent. A service is a process (or a group
+of processes) that systemd manages: it knows how to start it, stop it, restart it, whether it
+should start at boot, and it keeps the logs in the journal. My `sleep 900` was only a process,
+so nothing would bring it back; `httpd` is a managed service, so `systemctl` can tell me its
+state and `journalctl` has its logs.
+
+`stop` and `disable` are different things. `stop` ends the service now, `disable` only
+changes whether it starts at the next boot. A service can be stopped and still enabled, which
+surprised me. I also learned to try SIGTERM before SIGKILL, because SIGTERM lets a process
+close cleanly and SIGKILL does not.
+
+The other useful lesson is the way a missing service looks from outside: when nothing listens
+on a port, `ss` shows nothing and `curl` is refused. I checked listening sockets with `ss`
+instead of assuming that "active" means "reachable", and I will use that again in the
+networking labs.

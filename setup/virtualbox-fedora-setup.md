@@ -1,6 +1,6 @@
 # Setup — Fedora in VirtualBox
 
-These labs use one Fedora VM. Set it up once, then start with Lab 01.
+These labs use one Fedora VM. Set it up once, then start with `linux/01-users-and-permissions.md`.
 
 
 ---
@@ -9,7 +9,7 @@ These labs use one Fedora VM. Set it up once, then start with Lab 01.
 
 | Item | Value I used | Notes |
 |---|---|---|
-| Host OS | `<fill in: e.g. Windows 11 / macOS>` | Anything that runs VirtualBox |
+| Host OS | Windows 11 | Anything that runs VirtualBox |
 | VirtualBox | 7.x | Install from virtualbox.org |
 | Guest ISO | Fedora Workstation (64-bit) | ~2 GB, from <https://fedoraproject.org/workstation/download> |
 | VM RAM | 4096 MB | 2048 MB works but GNOME feels slow |
@@ -18,7 +18,7 @@ These labs use one Fedora VM. Set it up once, then start with Lab 01.
 
 I chose **Fedora Workstation** (GNOME) because the terminal, the file manager and
 the screenshot tool are all one keystroke away. Fedora Server would also work, but
-some output in the screenshots would differ (different default firewalld zone).
+some output would differ (different default firewalld zone).
 
 ---
 
@@ -42,8 +42,7 @@ some output in the screenshots would differ (different default firewalld zone).
    - With those two adapters the VM ends up with two interfaces: `enp0s3` (NAT) and
      `enp0s8` (host-only). Your names may differ — always check with `ip -brief link`.
    - Only NAT (no host-only) is not enough: several labs need to test "from the host
-     machine to the VM" (SSH, firewall rules). See the NAT alternative in Lab 04 if you
-     really cannot add a second adapter.
+     machine to the VM" (SSH, firewall rules).
 
 3. **Settings → System → Processor**: enable VT-x/AMD-V (usually already on).
 
@@ -81,7 +80,7 @@ sudo firewall-cmd --get-default-zone
 Expected: `enp0s3` has an IP from the NAT network (usually `10.0.2.15/24`) and
 `enp0s8` has an IP from the host-only network (usually `192.168.56.10x/24`).
 
-**Example output — your result may differ**
+**Illustrative output — exact values differ per VM**
 
 ```text
 $ ip -brief addr
@@ -100,7 +99,7 @@ ping -n 4 192.168.56.101   # Windows host
 ```
 
 If this fails, VirtualBox's host-only DHCP did not give the VM an address (or gave a
-different one). Lab 01 fixes that by setting a static address on the host-only adapter.
+different one). `networking/01` sets a static address on the host-only adapter.
 
 ## 5. Take a snapshot (do this before every lab that breaks something)
 
@@ -117,19 +116,19 @@ Rules I follow:
   `sudo dnf install virtualbox-guest-additions` then reboot. If the package is not
   available on your Fedora version, skip it — none of the labs needs it.
 - Screenshots in GNOME: press **Print Screen** (saves to `~/Pictures/Screenshots`).
-- The repo can live inside the VM (`git clone`) so that screenshots and files are in the
-  same place. See `evidence/README.md` for how to move host-side screenshots into the VM.
+- The repo can live inside the VM (`git clone`) so that the notes, scripts and screenshots are in
+  the same place. See `evidence/README.md` for the screenshot policy.
 
 ---
 
 ## Fedora notes used by the labs
 
 - **firewalld on Workstation is not strict.** The default zone `FedoraWorkstation` opens
-  ports 1025–65535. Lab 04 shows this and switches the VM to the `public` zone so that
+  ports 1025–65535. `networking/04` shows this and switches the VM to the `public` zone so that
   firewall tests mean something.
 - **DNS is not in `/etc/resolv.conf`.** It is a symlink to the systemd-resolved stub
   (`127.0.0.53`). The real per-connection DNS settings live in NetworkManager and are
-  shown with `resolvectl status`. Lab 03 covers this.
+  shown with `resolvectl status`. `networking/03` covers this.
 - **SELinux is enforcing by default.** It can block a service that "should" work. The labs
-  stay on default ports to avoid this, but Lab 05 shows where to look if it happens.
+  stay on default ports to avoid this, but `linux/05` shows where to look if it happens.
 - **`sshd` is the service name**, not `ssh` (`openssh-server` package).

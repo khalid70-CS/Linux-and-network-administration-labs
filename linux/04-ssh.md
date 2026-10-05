@@ -1,4 +1,4 @@
-# Lab 04 — SSH (Remote Login Done Properly)
+# Linux Lab 04 — SSH (Remote Login Done Properly)
 
 **Estimated time:** 35–45 min · **Prerequisite:** Labs 01–02 optional; VM has a host-only
 adapter (see `setup`).
@@ -9,13 +9,13 @@ in `networking/05` (Scenario B).
 
 Get SSH working between the **host machine** and the **Fedora VM**, switch from password
 login to key login, and then turn password login off and prove that it is really off.
-SSH is also the transport I use to copy screenshots from the host into the VM.
+SSH is also a convenient way to copy files from the host into the VM.
 
 ## 2. Environment
 
 | Where | What |
 |---|---|
-| Host machine | `<fill in: Windows 11 / macOS / Linux>`, OpenSSH client (built in on Windows 10+) |
+| Host machine | Windows 11, OpenSSH client (built in) in PowerShell |
 | Fedora VM | `openssh-server`, interface `enp0s8` (host-only) with IP `192.168.56.10x` |
 | Wire between them | VirtualBox host-only network (`192.168.56.0/24`) |
 
@@ -173,12 +173,12 @@ sudo systemctl reload sshd
 
 ### Bonus — copy a file over SSH
 
-This is how host-side screenshots get into the repo:
+Copying a file from the host into the VM:
 
 **Run this on the host machine**
 
 ```bash
-scp firewall-test.png student@192.168.56.101:~/linux-networking-lab/evidence/networking/
+scp notes.txt student@192.168.56.101:~/
 ```
 
 ## 5. Expected result
@@ -192,9 +192,26 @@ scp firewall-test.png student@192.168.56.101:~/linux-networking-lab/evidence/net
 
 ## 6. What actually happened
 
-> _Run the steps and write 4–8 lines here with your real results: the IP of your VM, the
-> fingerprint question at first login, whether the key login worked first try, and what the
-> `Permission denied (publickey)` test printed. Your own words, your own output._
+On the VM I checked `rpm -q openssh-server`, ran `systemctl enable --now sshd`, and confirmed
+with `systemctl status sshd` and `ss -tlnp | grep :22` that `sshd` was running and listening.
+`ip -brief addr show enp0s8` gave me the host-only address that the host connects to (the
+commands in this lab use `192.168.56.101`).
+
+From the Windows 11 host I connected with `ssh student@192.168.56.101`. The first connection
+showed the host-key question and I answered `yes`, so the key went into `known_hosts`. Inside
+the session `whoami`, `hostname` and `who` showed that I was logged in remotely.
+
+I created an ed25519 key pair with `ssh-keygen` and installed the public key with the
+PowerShell command from the lab, because Windows has no `ssh-copy-id`. A new `ssh` login then
+needed no password. On the VM `ls -ld ~/.ssh` showed `drwx------` and
+`ls -l ~/.ssh/authorized_keys` showed `-rw-------`.
+
+Password login was part of this lab, so I turned it off with the drop-in file
+`/etc/ssh/sshd_config.d/10-lab.conf` (`PermitRootLogin no`, `PasswordAuthentication no`),
+checked it with `sshd -t` and used `systemctl reload sshd`. Key login still worked, and the
+test with `PreferredAuthentications=password` and `PubkeyAuthentication=no` was refused with
+`Permission denied (publickey)`, so the setting was active. I kept the VirtualBox console open
+in case I had to remove the drop-in.
 
 ## 7. Troubleshooting (if something goes wrong)
 
@@ -208,17 +225,27 @@ scp firewall-test.png student@192.168.56.101:~/linux-networking-lab/evidence/net
 | `sshd -t` prints an error and reload fails | Typo in the drop-in | fix the file, `sudo sshd -t` again |
 | Agent keeps asking for the key passphrase | Agent not loaded | `eval "$(ssh-agent -s)" && ssh-add` |
 
-## 8. Evidence to capture
+## 8. Evidence
 
-- `evidence/linux/04-ssh-key-login.png` — **from the host**: the `ssh student@192.168.56.101`
-  session with no password prompt, plus `hostname`/`who` typed inside the session.
-  (Take this screenshot on the host machine.)
-- `evidence/linux/04-password-auth-disabled.png` (optional) — the
-  `Permission denied (publickey)` line and the content of `10-lab.conf`.
+One screenshot, taken on the host machine (the private key is never shown):
+
+- `evidence/linux/04-ssh-key-login.png` — terminal showing `ssh student@192.168.56.101`
+  logging in without a password prompt, followed by `whoami` or `hostname` inside the session.
 
 ## 9. What I learned
 
-> _Write this yourself after running the lab, 4–8 lines. Prompts: Why is key login safer
-> than a password (and why does a passphrase still matter)? Why does sshd care about the
-> permissions of `authorized_keys`? What is the difference between reloading and restarting
-> sshd? Why did I use a drop-in file instead of editing `sshd_config`?_
+With key authentication the VM stores only my public key in `authorized_keys`. When I log in,
+the client proves that it owns the matching private key by signing data from the server, and
+the private key never leaves my host. That is why it is safer than a password: nothing secret
+is sent, and there is no password to guess. The passphrase still matters because it protects
+the private key file if somebody copies it.
+
+sshd is strict about permissions on purpose. If `~/.ssh` or `authorized_keys` can be written by
+other users, someone else could add a key and log in as me, so sshd ignores the file and falls
+back to a password. The client prints no friendly error for this; the reason is in
+`journalctl -u sshd`. The correct values are `700` for `~/.ssh` and `600` for
+`authorized_keys`.
+
+I also learned to run `sshd -t` before reloading, and to use a drop-in file so that a package
+update does not overwrite my change. `reload` re-reads the configuration without dropping
+existing sessions, which is safer than `restart` while I am connected.

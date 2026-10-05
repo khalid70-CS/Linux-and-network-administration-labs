@@ -1,7 +1,7 @@
-# Lab 01 — Users, Groups and Permissions
+# Linux Lab 01 — Users, Groups and Permissions
 
 **Estimated time:** 30–40 min · **Prerequisite:** `setup/virtualbox-fedora-setup.md` done.
-**Related:** file ownership is also used in Lab 04 (`~/.ssh` permissions).
+**Related:** file ownership is also used in Linux Lab 04 (`~/.ssh` permissions).
 
 ## 1. Objective
 
@@ -11,7 +11,7 @@ the ownership and the umask produce that result.
 
 ## 2. Environment
 
-- Fedora Workstation in VirtualBox (my VM: `<fill in: hostname>`), normal user with sudo.
+- Fedora Workstation in VirtualBox (my VirtualBox VM: `fedora-lab`), normal user with sudo.
 - Users used: `alice`, `bob` (members of `devs`), `carol` (not a member).
 - Target directory: `/srv/labproject`
 
@@ -44,7 +44,7 @@ id alice               # uid, gid and every group alice is in
 Note: on Fedora, members of the group `wheel` can use `sudo`. I did **not** add the lab
 users to `wheel` — they are test users, so I do things *as* them with `sudo -u`.
 
-**Example output — your result may differ**
+**Illustrative output — exact values differ per VM**
 
 ```text
 $ id alice
@@ -85,7 +85,7 @@ Reading `drwxrws---`: the `s` in the group position is the setgid bit. It means 
 files and directories inside get the group `devs`**, instead of the group of whoever
 created them. That is what makes a shared folder actually work.
 
-**Example output — your result may differ**
+**Illustrative output — exact values differ per VM**
 
 ```text
 $ ls -ld /srv/labproject
@@ -112,7 +112,7 @@ ls -l /srv/labproject
 Expected for the first two files: group `devs`, even though they were created by `alice`
 and `bob` (that is the setgid bit doing its job). Expected for carol: `Permission denied`.
 
-**Example output — your result may differ**
+**Illustrative output — exact values differ per VM**
 
 ```text
 $ ls -l /srv/labproject
@@ -155,10 +155,21 @@ setgid = "files inherit my group", sticky = "you can only remove your own files"
 
 ## 6. What actually happened
 
-> _Run the steps above on your VM, then write 4–8 honest lines here: what worked
-> immediately, what surprised you, and the real output you got. Do not copy the example
-> output — put your own. If you fixed something, mention it briefly (details go in
-> section 7)._
+I created the three users with `useradd -m` and set a password only for `alice`. I created
+the group `devs`, added `alice` and `bob` with `usermod -aG`, and checked the result with
+`id alice` and `getent group devs`. `carol` was not in the group. At first it confused me that
+`id alice` already showed `devs` while a shell that `alice` had opened earlier would not have
+it: the groups of a process are fixed when the session starts.
+
+For the shared directory I used `chown root:devs /srv/labproject` and `chmod 2770`. `ls -ld`
+showed `drwxrws---`, with an `s` in the group position, which is the setgid bit. Files created
+with `sudo -u alice touch` and `sudo -u bob touch` got the group `devs`, not the personal group
+of the user who created them. The same `touch` as `carol` failed with `Permission denied`,
+which was the result I wanted to see.
+
+For the umask I compared a new file under the default umask (`-rw-r--r--`) with a new file
+after `umask 0077` (`-rw-------`). I also looked at `ls -ld /tmp` to see the sticky bit as a
+different special permission.
 
 ## 7. Troubleshooting (if something goes wrong)
 
@@ -171,19 +182,28 @@ setgid = "files inherit my group", sticky = "you can only remove your own files"
 | Files do **not** get group `devs` | setgid bit missing or the directory was recreated | `ls -ld /srv/labproject` (look for the `s`) |
 | `su - alice` asks for a password you never set | You skipped `passwd alice` | `sudo passwd alice`, or use `sudo -u alice -i` |
 
-## 8. Evidence to capture
+## 8. Evidence
 
-One screenshot is enough:
+One screenshot, taken in the Fedora VM:
 
-- `evidence/linux/01-users-permissions.png` — must show: `id alice` + `id carol`,
+- `evidence/linux/01-users-permissions.png` — terminal showing `id alice` and `id carol`,
   `ls -ld /srv/labproject` (with the `s`), `ls -l /srv/labproject` (files with group `devs`)
-  and the `Permission denied` for carol. If it does not fit in one terminal, take a second
-  screenshot named `01-users-permissions-2.png`.
+  and the `Permission denied` for `carol`.
 
 ## 9. What I learned
 
-> _Write this section yourself after running the lab, in 4–8 lines. Prompts, if you need
-> them: Why does a shared directory need setgid and not only `chmod 770`? Why do file
-> permissions start from `666` and directories from `777`? Why is `usermod -aG` dangerous
-> without the `-a`? What is the difference between "user exists" and "the running shell
-> already has the new group"?_
+Linux decides access by looking at three things in order: is the process the owner of the
+file, is it in the file's group, or is it "other". The three `rwx` triplets belong to those
+three classes, so `chown root:devs` and `chmod 770` together mean "group `devs` can work here,
+everybody else cannot". `chmod 770` alone is not enough for a shared folder, because new files
+would get the primary group of whoever creates them. The setgid bit (the `2` in `2770`) makes
+new files inherit `devs`, so the other group members can still use them.
+
+The umask removes permission bits from the starting values `666` (files) and `777`
+(directories). That is why a new file is not executable by default and why `umask 0077` gives
+`-rw-------`. It belongs to the running shell, so it is gone when the shell closes.
+
+Two practical lessons: `usermod -aG` needs the `-a`, otherwise the supplementary groups are
+replaced instead of extended, and "the user is in the group" (`id alice`) is not the same as
+"the shell that is already running has the group". I also learned that I can test other users
+safely with `sudo -u` without adding them to `wheel`.

@@ -1,6 +1,6 @@
-# Lab 03 — Packages and Filesystem Basics
+# Linux Lab 03 — Packages and Filesystem Basics
 
-**Estimated time:** 25–35 min · **Prerequisite:** Lab 02 (httpd is installed here and used
+**Estimated time:** 25–35 min · **Prerequisite:** Linux Lab 02 (httpd is installed here and used
 again as the example package).
 
 ## 1. Objective
@@ -12,7 +12,7 @@ between a hard link and a symbolic link.
 ## 2. Environment
 
 - Fedora Workstation in VirtualBox, normal user with sudo.
-- Example packages: `htop` (install → remove demo), `httpd` (installed in Lab 02).
+- Example packages: `htop` (install → remove demo), `httpd` (installed in Linux Lab 02).
 
 ## 3. What I needed to do
 
@@ -137,9 +137,21 @@ database to be up to date, so I stayed with `find`.
 
 ## 6. What actually happened
 
-> _Run the steps on your VM and write 4–8 lines here: which filesystem your root is
-> (`lsblk -f` / `findmnt /`), how much space `/var/log` uses, and what the link test
-> showed. Use your own numbers._
+I used `dnf search` and `dnf info` to look at `htop`, installed it with `dnf install`, confirmed
+it with `rpm -q htop`, removed it with `dnf remove`, and `rpm -q htop` then reported that the
+package is not installed. With `rpm -qf /usr/sbin/httpd` I found the package that owns a file,
+`rpm -ql httpd` listed the files it installed, and `dnf provides /usr/sbin/sshd` pointed to
+`openssh-server`. `dnf history list` showed my installs and removals as numbered transactions.
+
+For the filesystem I used `lsblk -f` and `findmnt /`. My Fedora Workstation root filesystem
+was Btrfs, which is the default of the installer. I read the usage with `df -h` and `df -i`,
+and `du -sh /var/log` plus the sorted `du` command showed where the log space goes.
+
+In the link test I created `notes.txt`, then `hard.txt` (hard link) and `soft.txt` (symbolic
+link). `ls -li` showed that `hard.txt` and `notes.txt` have the same inode number and
+`soft.txt` has a different one. After `rm notes.txt`, `cat hard.txt` still worked and
+`cat soft.txt` failed with `No such file or directory`, because the symlink pointed to a path
+that no longer existed.
 
 ## 7. Troubleshooting (if something goes wrong)
 
@@ -153,15 +165,25 @@ database to be up to date, so I stayed with `find`.
 | `df` shows a full disk but `du` disagrees | Deleted file still held open by a process | `sudo lsof +L1` |
 | Broken symlink after a package update | The symlink points to an old versioned path | `ls -l <link>`, `readlink <link>` |
 
-## 8. Evidence to capture
+## 8. Evidence
 
-- `evidence/linux/03-packages.png` — `rpm -qf /usr/sbin/httpd`, `rpm -ql httpd | head`,
-  `dnf provides /usr/sbin/sshd` and the `dnf history list` output.
-- `evidence/linux/03-disk-usage.png` — `lsblk -f`, `df -h`, `du -sh /var/log` (and the link
-  test `ls -li` / `cat hard.txt` if there is room).
+No screenshot is part of this lab. The evidence is the command flow in section 4 and the
+results written down in section 6.
 
 ## 9. What I learned
 
-> _Write this yourself after running the lab, 4–8 lines. Prompts: dnf vs rpm — when do I
-> use which? What is an inode, and how does the hard-link test prove what a hard link is?
-> Why can "no space left on device" happen with free space in `df -h`?_
+`dnf` and `rpm` solve different problems. `dnf` finds packages and installs them with their
+dependencies, and `dnf provides` answers "which package gives me this command?". `rpm` queries
+what is installed on the machine right now, for example which package owns a file. Package
+management is about software; the filesystem layout is about where things are stored;
+disk usage is about how much space they take; and file metadata (`stat`) is about one file:
+owner, permissions, size, timestamps and inode.
+
+`df` asks the filesystem how full it is, and `du` walks the files and adds up their size, so
+they can disagree (for example when a deleted file is still held open by a process). `df -i`
+reminded me that a disk can also run out of inodes.
+
+The link test made the difference clear: a file name is just a link to an inode. A hard link is
+a second name for the same data, so the data survives when the first name is removed. A
+symbolic link only stores a path, so it breaks when the target is gone. I also learned that
+DNF5 needs the sub-command in `dnf history list`.

@@ -1,6 +1,6 @@
-# Lab 03 — DNS on Fedora (systemd-resolved + NetworkManager)
+# Networking Lab N3 — DNS on Fedora (systemd-resolved + NetworkManager)
 
-**Estimated time:** 30–40 min · **Prerequisite:** `setup` (`bind-utils` installed), Lab 01/02
+**Estimated time:** 30–40 min · **Prerequisite:** `setup` (`bind-utils` installed), N1/N2
 helpful.
 **Related:** this is the base for Scenario A in `networking/05`.
 
@@ -35,7 +35,7 @@ ls -l /etc/resolv.conf        # a symlink to /run/systemd/resolve/stub-resolv.co
 cat /etc/resolv.conf
 ```
 
-**Example output — your result may differ**
+**Illustrative output — exact values differ per VM**
 
 ```text
 # This is /run/systemd/resolve/stub-resolv.conf managed by man:systemd-resolved(8).
@@ -83,7 +83,7 @@ Two things I check in the header: the `status` (`NOERROR`, `NXDOMAIN`, `SERVFAIL
 timeout) and the `SERVER` line — by default dig asks `127.0.0.53`, the local stub.
 `dig @1.1.1.1` is the classic isolation trick: if that works while the default query fails,
 the network is fine and only my local resolver configuration is wrong (that is Scenario A in
-Lab 05).
+N5).
 
 Small trap: `dig` exits with status 0 even when the answer is NXDOMAIN, so its exit code is
 not a good "did it work?" test in scripts. `getent hosts` does return a non-zero exit
@@ -122,7 +122,7 @@ getent hosts mylab.test                    # now it fails again
 **Run this on Fedora**
 
 ```bash
-CON="Wired connection 1"      # <-- your NAT profile (the one with the gateway)
+CON="Wired connection 1"      # NAT profile (the one with the gateway)
 
 nmcli -g ipv4.dns,ipv4.ignore-auto-dns connection show "$CON"   # before: probably empty
 
@@ -169,8 +169,26 @@ resolvectl flush-caches                                # clear the cache and com
 
 ## 6. What actually happened
 
-> _Run the steps and write 4–8 lines here: which DNS server your VM used before and after,
-> one real query time from `dig`, and the exact output of `dig doesnotexist.invalid`._
+`ls -l /etc/resolv.conf` showed a symlink to the systemd-resolved stub file, and `cat` showed
+only the local stub address `127.0.0.53`, so the real DNS settings are not in that file. I read
+the real state with `resolvectl status` (the NAT interface had the DNS server handed out by
+VirtualBox NAT and the host-only interface had none) and with `resolvectl query
+fedoraproject.org`.
+
+With `dig` I compared the full answer, `+short`, `MX` for `gmail.com` and `+noall +answer`. I
+asked a specific server with `dig @1.1.1.1 fedoraproject.org` and read the `SERVER` line and
+the query time in the header. `dig doesnotexist.invalid` returned `status: NXDOMAIN`.
+`getent hosts fedoraproject.org` also resolved, and `grep ^hosts /etc/nsswitch.conf` showed the
+lookup order.
+
+For `/etc/hosts` I added `127.0.0.1 mylab.test`. `getent hosts mylab.test` and `ping` found
+it, but `dig mylab.test` returned `NXDOMAIN`, because `dig` only asks DNS. I deleted the line
+afterwards and `getent` failed again.
+
+Last, I set `ipv4.ignore-auto-dns yes` and `ipv4.dns "1.1.1.1 9.9.9.9"` on the NAT profile,
+activated it, and `resolvectl status` then listed those servers for the NAT link. Name
+resolution kept working. I reverted with `ipv4.ignore-auto-dns no` and an empty `ipv4.dns`,
+and `resolvectl status` showed the original server again.
 
 ## 7. Troubleshooting (if something goes wrong)
 
@@ -184,14 +202,25 @@ resolvectl flush-caches                                # clear the cache and com
 | My DNS change had no effect | `ignore-auto-dns` not set, so DHCP servers are still listed | `nmcli -g ipv4.dns,ipv4.ignore-auto-dns connection show "$CON"` |
 | `getent hosts` works but `dig` does not | The name is in `/etc/hosts` | `grep <name> /etc/hosts` |
 
-## 8. Evidence to capture
+## 8. Evidence
 
-- `evidence/networking/03-dns.png` — `resolvectl status` next to `dig +short
-  fedoraproject.org` and `getent hosts fedoraproject.org` (and the `dig @1.1.1.1` result if
-  it fits).
+No screenshot is part of this lab. The evidence is the command flow in section 4 and
+the results written down in section 6.
 
 ## 9. What I learned
 
-> _Write this yourself after running the lab, 4–8 lines. Prompts: Why is editing
-> `/etc/resolv.conf` the wrong fix on Fedora? What is the difference between `dig` and
-> `getent hosts`? When would I use `dig @server`? What does the `127.0.0.53` address do?_
+DNS configuration answers "which servers does this machine ask, and for which interface?". On
+Fedora that lives in the NetworkManager connection and is applied by `systemd-resolved`, and I
+read it with `resolvectl status`. Hostname resolution answers "what IP does this name have?", and
+it is done by the system resolver, which follows `/etc/nsswitch.conf`, checks `/etc/hosts`
+first and then asks DNS. The two can disagree: `getent hosts mylab.test` worked through
+`/etc/hosts`, while `dig` (DNS only) did not.
+
+Editing `/etc/resolv.conf` is the wrong fix on Fedora, because it is only a link to the stub
+at `127.0.0.53`, and systemd-resolved manages the real servers. That stub is a local resolver
+that forwards my queries to the configured servers.
+
+`dig @server` is useful to ask one specific server and ignore my local configuration. If it
+works while the normal query fails, the network is fine and the local DNS configuration is the
+problem. I also learned that `ipv4.ignore-auto-dns yes` replaces the DHCP servers instead of
+adding to them, and that `getent hosts` is a better test than `dig` for what applications see.

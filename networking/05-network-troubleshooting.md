@@ -1,4 +1,4 @@
-# Lab 05 — Network Troubleshooting (2 Scenarios)
+# Networking Lab N5 — Network Troubleshooting (2 Scenarios)
 
 **Estimated time:** 40–50 min · **Prerequisite:** `networking/03` (DNS) and `networking/04`
 (firewall) done — the faults below are created with the same tools, so I need to know them
@@ -13,7 +13,7 @@ symptom → investigation → finding → fix → verification.
 
 ## 2. Environment
 
-- Fedora VM in the `public` firewalld zone, `sshd` running (Lab 04), NAT + host-only.
+- Fedora VM in the `public` firewalld zone, `sshd` running (Linux Lab 04), NAT + host-only.
 - The two faults (a wrong DNS server, and a removed firewall rule) are created by me at the
   start of each scenario.
 
@@ -32,13 +32,13 @@ symptom → investigation → finding → fix → verification.
 
 | # | Question | Command | If it fails |
 |---|---|---|---|
-| 1 | Is the interface up with an IP? | `ip -brief addr` | link/IP problem (Lab 01) |
-| 2 | Is there a route out? | `ip route`, `ip route get 8.8.8.8` | routing problem (Lab 02) |
+| 1 | Is the interface up with an IP? | `ip -brief addr` | link/IP problem (N1) |
+| 2 | Is there a route out? | `ip route`, `ip route get 8.8.8.8` | routing problem (N2) |
 | 3 | Does an IP address answer? | `ping -c 2 1.1.1.1` | link/route/NAT |
-| 4 | Does a **name** resolve? | `getent hosts fedoraproject.org` | DNS problem (this lab / Lab 03) |
+| 4 | Does a **name** resolve? | `getent hosts fedoraproject.org` | DNS problem (this lab / N3) |
 | 5 | Does the application answer? | `curl -I https://...`, `nc -zv host port` | port/service/firewall |
-| 6 | Is the service listening there? | `ss -tlnp` (on the target) | service problem (Lab 02/05) |
-| 7 | Is anything blocking it? | `sudo firewall-cmd --list-all` | firewall (Lab 04) |
+| 6 | Is the service listening there? | `ss -tlnp` (on the target) | service problem (Linux Lab 02/05) |
+| 7 | Is anything blocking it? | `sudo firewall-cmd --list-all` | firewall (N4) |
 | 8 | What do the logs say? | `journalctl -u <service> -n 30` | the error is usually written there |
 
 `ping` answers question 3, not question 4 or 5. Most of the time I lose time because I test
@@ -53,7 +53,7 @@ the wrong layer.
 **Run this on Fedora**
 
 ```bash
-NAT="Wired connection 1"        # <-- your NAT profile (the one with the default route)
+NAT="Wired connection 1"        # NAT profile (the one with the default route)
 sudo nmcli connection modify "$NAT" ipv4.ignore-auto-dns yes ipv4.dns 192.0.2.1
 sudo nmcli connection up "$NAT"
 ```
@@ -144,7 +144,7 @@ Test-NetConnection -ComputerName 192.168.56.101 -Port 22
 ```
 
 Record the exact message you get. A timeout (or a fast rejection) tells me *that* something
-is blocking, but not *what* — remember Lab 04: a rejected/dropped packet and "nothing
+is blocking, but not *what* — remember N4: a rejected/dropped packet and "nothing
 listening" can produce messages that look similar.
 
 **Step 3 — investigate (on the VM, and from the host)**
@@ -223,10 +223,27 @@ connection, and the connection was opened before the rule was removed), and why 
 
 ## 6. What actually happened
 
-> _Run both scenarios. For each one write: the exact symptom line you saw, the command that
-> gave the answer away, how long it took you, and what you initially suspected wrongly (if
-> you did — that is the honest and interesting part). Finally, verify the fix with the same
-> command that failed in the beginning and say so._
+I used the order of checks from Part 0 (interface and IP, route, IP ping, name resolution,
+application, listener, firewall, logs) so I would not test the wrong layer.
+
+**Scenario A: IP works but DNS does not.** I created the fault with `ipv4.ignore-auto-dns yes
+ipv4.dns 192.0.2.1` on the NAT profile. Symptom: `ping -c 2 1.1.1.1` worked, but `ping
+fedoraproject.org` failed with `Name or service not known` and `curl` could not resolve the
+host. Checks: `cat /etc/resolv.conf` looked normal (only `127.0.0.53`), but `resolvectl status`
+listed `192.0.2.1` as the DNS server, `resolvectl query` failed and `ping 192.0.2.1` got no
+answer. `dig @1.1.1.1 fedoraproject.org` worked while the plain `dig` did not. Cause: the NAT
+connection pointed at a DNS server that does not answer. Fix: `ipv4.ignore-auto-dns no`, an
+empty `ipv4.dns`, then `nmcli connection up`. Verification: `resolvectl query`, `ping
+fedoraproject.org` and `curl -I` worked again.
+
+**Scenario B: service listening, remote access blocked.** I removed `ssh` from the `public` zone
+with `--permanent --remove-service=ssh` and `--reload`. Symptom: from the host, a new
+`ssh student@192.168.56.101` did not connect. Checks on the VM: `sshd` was `active (running)`,
+`sshd -t` printed nothing, `ss` showed port 22 listening, the local test with `nc` on
+`127.0.0.1` worked, and `--query-service=ssh` said `no`. Cause: the firewall zone no longer
+allowed `ssh`; the service itself was fine. Fix: `--add-service=ssh` at runtime, a new SSH
+connection from the host, then `--permanent --add-service=ssh` and `--reload`. Verification:
+`--query-service=ssh` said `yes` and a fresh SSH connection from the host worked.
 
 ## 7. Troubleshooting (if something goes wrong)
 
@@ -240,22 +257,25 @@ connection, and the connection was opened before the rule was removed), and why 
 | Scenario B: the host shows a firewall of its own blocking it | Host-side antivirus/browser firewall blocks the VirtualBox host-only subnet | PowerShell: `Get-NetFirewallProfile` / Windows Defender Firewall settings (outside the VM, out of scope for this repo) |
 | I am not sure which layer is broken | Stop guessing | Follow the 8-row table in Part 0 |
 
-## 8. Evidence to capture
+## 8. Evidence
 
-- `evidence/networking/05-scenario-a-dns-failure.png` — the failing name resolution
-  (`ping`/`curl` message) + `resolvectl status` showing the bad server + `dig @1.1.1.1`
-  working.
-- `evidence/networking/05-scenario-b-firewall.png` — the timed-out SSH from the **host** +
-  `sudo ss -tlnp | grep :22` and `--query-service=ssh` on the VM + the successful SSH after
-  the fix.
-
-  These two are the "before and after" screenshots that make this lab believable. If the
-  parts do not fit in one image, use `-1.png` / `-2.png`.
+No screenshot is part of this lab. The evidence is the command flow in section 4 and
+the results written down in section 6.
 
 ## 9. What I learned
 
-> _Write this yourself after running the lab, 6–10 lines. Prompts: Which single check told
-> me, in each scenario, which layer the problem was on? Why did the service "work" in both
-> scenarios while the user could not use it? What would I do differently next time to find
-> it faster? Write the two scenarios in the Symptom → Investigation → Finding → Fix →
-> Verification shape — that is the useful summary for an interview._
+In Scenario A the key check was `dig @1.1.1.1`: it worked, so the network and the DNS
+protocol were fine and only my DNS configuration was wrong. `/etc/resolv.conf` looked healthy
+the whole time, because it only shows the local stub, so `resolvectl status` was the check that
+showed the real server. Restarting `systemd-resolved` would have been a guess that did not fix
+the cause.
+
+In Scenario B the key check was the difference between local and remote. `sshd` was running,
+listening and answering on the loopback, so the service was not the problem. The packets from
+outside were stopped by the zone, and `--query-service=ssh` showed it. In both scenarios the
+service or network seemed to "work", but the user could not use it, because the fault was one
+layer away: DNS configuration in A, firewall rule in B.
+
+The lesson for my own work is to follow the order from Part 0 and to verify a fix with the same
+command that failed at the start. I should also use a new connection to test, because an
+established session can survive a removed rule and look like a success.
