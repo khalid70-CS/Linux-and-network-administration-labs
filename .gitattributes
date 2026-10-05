@@ -1,0 +1,4 @@
+# Keep shell scripts on LF line endings, whatever the machine that clones it.
+# Reason: a CRLF shebang turns /bin/bash into "/bin/bash^M" — the exact bug that
+# Scenario B in linux/05 is about, and I do not want to reproduce it with git.
+*.sh text eol=lf
